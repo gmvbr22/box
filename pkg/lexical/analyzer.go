@@ -11,10 +11,6 @@ import (
 	"unicode"
 )
 
-const K = true
-
-type Type int
-
 const (
 	Keyword    = '0'
 	Identifier = '1'
@@ -38,18 +34,18 @@ var Keywords = map[string]rune{
 	"bool":       '9',
 }
 
-var Operators = map[rune]bool{
-	0x2B: K, // +
-	0x2D: K, // -
-	0x2A: K, // *
-	0x2F: K, // /
-	0x3A: K, // :
+var Operators = map[rune]rune{
+	0x2B: '0', // +
+	0x2D: '1', // -
+	0x2A: '2', // *
+	0x2F: '3', // /
+	0x3A: '4', // :
 }
 
-var Separators = map[rune]bool{
-	0x7B: K, // {
-	0x7D: K, // }
-	0x3B: K, // ;
+var Separators = map[rune]rune{
+	0x7B: '0', // {
+	0x7D: '1', // }
+	0x3B: '2', // ;
 }
 
 // Operator: 2 Position Rune
@@ -59,7 +55,7 @@ func writeOperator(out *os.File, b *strings.Builder, p int, c rune) {
 	b.WriteRune(space)
 	b.WriteString(strconv.Itoa(p))
 	b.WriteRune(space)
-	b.WriteString(string(c))
+	b.WriteRune(c)
 	b.WriteRune(new_line)
 
 	if _, err := out.Write([]byte(b.String())); err != nil {
@@ -75,7 +71,7 @@ func writeSeparator(out *os.File, b *strings.Builder, p int, c rune) {
 	b.WriteRune(space)
 	b.WriteString(strconv.Itoa(p))
 	b.WriteRune(space)
-	b.WriteString(string(c))
+	b.WriteRune(c)
 	b.WriteRune(new_line)
 
 	if _, err := out.Write([]byte(b.String())); err != nil {
@@ -160,14 +156,14 @@ func ParseFile(input string) {
 				break
 			}
 		} else {
-			if _, is_separator := Separators[current]; is_separator {
+			if separator, is_separator := Separators[current]; is_separator {
 				resolveWord(out, &builder, &word_builder, kw_pos)
 				kw_pos = 0
-				writeSeparator(out, &builder, index, current)
-			} else if _, is_operator := Operators[current]; is_operator {
+				writeSeparator(out, &builder, index, separator)
+			} else if operator, is_operator := Operators[current]; is_operator {
 				resolveWord(out, &builder, &word_builder, kw_pos)
 				kw_pos = 0
-				writeOperator(out, &builder, index, current)
+				writeOperator(out, &builder, index, operator)
 			} else if unicode.IsLetter(current) {
 				if word_builder.Len() == 0 {
 					kw_pos = index
