@@ -25,17 +25,17 @@ const (
 const space = ' '
 const new_line = '\n'
 
-var Keywords = map[string]int{
-	"package":    0,
-	"export":     1,
-	"class":      2,
-	"interface":  3,
-	"implements": 4,
-	"private":    5,
-	"public":     6,
-	"int":        7,
-	"string":     8,
-	"bool":       9,
+var Keywords = map[string]rune{
+	"package":    '0',
+	"export":     '1',
+	"class":      '2',
+	"interface":  '3',
+	"implements": '4',
+	"private":    '5',
+	"public":     '6',
+	"int":        '7',
+	"string":     '8',
+	"bool":       '9',
 }
 
 var Operators = map[rune]bool{
@@ -84,13 +84,13 @@ func writeSeparator(out *os.File, b *strings.Builder, p int, c rune) {
 }
 
 // Keyword: 0 Position Type
-func writeKeyword(out *os.File, b *strings.Builder, p int, t int) {
+func writeKeyword(out *os.File, b *strings.Builder, p int, t rune) {
 	b.Reset()
 	b.WriteRune(Keyword)
 	b.WriteRune(space)
 	b.WriteString(strconv.Itoa(p))
 	b.WriteRune(space)
-	b.WriteString(strconv.Itoa(t))
+	b.WriteRune(t)
 	b.WriteRune(new_line)
 
 	if _, err := out.Write([]byte(b.String())); err != nil {
