@@ -65,7 +65,6 @@ func writeOperator(out *os.File, b *strings.Builder, p int, c rune) {
 
 // Separator: 3 Position Rune
 func writeSeparator(out *os.File, b *strings.Builder, p int, c rune) {
-
 	b.Reset()
 	b.WriteRune(Separator)
 	b.WriteRune(space)
