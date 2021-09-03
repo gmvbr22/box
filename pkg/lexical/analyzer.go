@@ -5,21 +5,11 @@ import (
 	"io"
 	"log"
 	"os"
-	"path"
-	"strconv"
 	"strings"
 	"unicode"
-)
 
-const (
-	Keyword    = '0'
-	Identifier = '1'
-	Operator   = '2'
-	Separator  = '3'
+	"github.com/gmvbr/box/pkg/ast"
 )
-
-const space = ' '
-const new_line = '\n'
 
 var Keywords = map[string]rune{
 	"package":    '0',
@@ -48,76 +38,97 @@ var Separators = map[rune]rune{
 	0x3B: '2', // ;
 }
 
-// Operator: 2 Position Rune
-func writeOperator(out *os.File, b *strings.Builder, p int, c rune) {
-	b.Reset()
-	b.WriteRune(Operator)
-	b.WriteRune(space)
-	b.WriteString(strconv.Itoa(p))
-	b.WriteRune(space)
-	b.WriteRune(c)
-	b.WriteRune(new_line)
-
-	if _, err := out.Write([]byte(b.String())); err != nil {
-		log.Fatal(err)
-	}
+type Analyzer struct {
+	Column      int
+	ColumnStart int
+	Line        int
+	Current     rune
+	Builder     *strings.Builder
 }
 
-// Separator: 3 Position Rune
-func writeSeparator(out *os.File, b *strings.Builder, p int, c rune) {
-	b.Reset()
-	b.WriteRune(Separator)
-	b.WriteRune(space)
-	b.WriteString(strconv.Itoa(p))
-	b.WriteRune(space)
-	b.WriteRune(c)
-	b.WriteRune(new_line)
-
-	if _, err := out.Write([]byte(b.String())); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// Keyword: 0 Position Type
-func writeKeyword(out *os.File, b *strings.Builder, p int, t rune) {
-	b.Reset()
-	b.WriteRune(Keyword)
-	b.WriteRune(space)
-	b.WriteString(strconv.Itoa(p))
-	b.WriteRune(space)
-	b.WriteRune(t)
-	b.WriteRune(new_line)
-
-	if _, err := out.Write([]byte(b.String())); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// ID: 0 Position ID
-func writeIdentifier(out *os.File, b *strings.Builder, p int, st string) {
-	b.Reset()
-	b.WriteRune(Identifier)
-	b.WriteRune(space)
-	b.WriteString(strconv.Itoa(p))
-	b.WriteRune(space)
-	b.WriteString(st)
-	b.WriteRune(new_line)
-
-	if _, err := out.Write([]byte(b.String())); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func resolveWord(out *os.File, b *strings.Builder, s *strings.Builder, p int) {
-	if s.Len() > 0 {
-		k := s.String()
-		if v, ok := Keywords[k]; ok {
-			writeKeyword(out, b, p, v)
+func resolveWord(analyzer *Analyzer) {
+	if analyzer.Builder.Len() > 0 {
+		k := analyzer.Builder.String()
+		if _, ok := Keywords[k]; ok {
+			ast.ReadToken(&ast.Token{
+				Type:   ast.Keyword,
+				Value:  strings.ToLower(k),
+				Line:   analyzer.Line,
+				Column: analyzer.ColumnStart,
+			})
 		} else {
-			writeIdentifier(out, b, p, k)
+			ast.ReadToken(&ast.Token{
+				Type:   ast.Identifier,
+				Value:  k,
+				Line:   analyzer.Line,
+				Column: analyzer.ColumnStart,
+			})
 		}
 	}
-	s.Reset()
+	analyzer.Builder.Reset()
+}
+
+func resolveSeparator(analyzer *Analyzer) bool {
+	if _, is_separator := Separators[analyzer.Current]; is_separator {
+		resolveWord(analyzer)
+		ast.ReadToken(&ast.Token{
+			Type:   ast.Separator,
+			Value:  string(analyzer.Current),
+			Line:   analyzer.Line,
+			Column: analyzer.Column,
+		})
+		return true
+	}
+	return false
+}
+
+func resolveOperator(analyzer *Analyzer) bool {
+	if _, is_operator := Operators[analyzer.Current]; is_operator {
+		resolveWord(analyzer)
+		ast.ReadToken(&ast.Token{
+			Type:   ast.Operator,
+			Value:  string(analyzer.Current),
+			Line:   analyzer.Line,
+			Column: analyzer.Column,
+		})
+		return true
+	}
+	return false
+}
+
+func resolveLetter(analyzer *Analyzer) bool {
+	if unicode.IsLetter(analyzer.Current) {
+		if analyzer.Builder.Len() == 0 {
+			analyzer.ColumnStart = analyzer.Column
+		}
+		analyzer.Builder.WriteRune(analyzer.Current)
+		return true
+	}
+	return false
+}
+
+func resolveSpace(analyzer *Analyzer) bool {
+	if unicode.IsSpace(analyzer.Current) {
+		resolveWord(analyzer)
+		if analyzer.Current == '\n' {
+			analyzer.Column = 0
+			analyzer.Line++
+		}
+		return true
+	}
+	return false
+}
+
+func resolveNumer(analyzer *Analyzer) bool {
+	if unicode.IsNumber(analyzer.Current) {
+		if analyzer.Builder.Len() != 0 {
+			analyzer.Builder.WriteRune(analyzer.Current)
+		} else {
+			resolveWord(analyzer)
+		}
+		return true
+	}
+	return false
 }
 
 func ParseFile(input string) {
@@ -130,22 +141,15 @@ func ParseFile(input string) {
 			panic(err)
 		}
 	}()
-	n := strings.Split(path.Base(input), ".")[0] + ".bo"
-	fp := path.Join(path.Dir(input), n)
-	out, err := os.OpenFile(fp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		panic(err)
+
+	var sb strings.Builder
+	analyzer := &Analyzer{
+		Column:      0,
+		ColumnStart: 0,
+		Line:        1,
+		Builder:     &sb,
 	}
-	defer func() {
-		if err := out.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	var word_builder strings.Builder
-	var builder strings.Builder
 	reader := bufio.NewReader(input_file)
-	index := 0
-	kw_pos := 0
 	for {
 		if current, _, err := reader.ReadRune(); err != nil {
 			if err == io.EOF {
@@ -155,32 +159,21 @@ func ParseFile(input string) {
 				break
 			}
 		} else {
-			if separator, is_separator := Separators[current]; is_separator {
-				resolveWord(out, &builder, &word_builder, kw_pos)
-				kw_pos = 0
-				writeSeparator(out, &builder, index, separator)
-			} else if operator, is_operator := Operators[current]; is_operator {
-				resolveWord(out, &builder, &word_builder, kw_pos)
-				kw_pos = 0
-				writeOperator(out, &builder, index, operator)
-			} else if unicode.IsLetter(current) {
-				if word_builder.Len() == 0 {
-					kw_pos = index
-				}
-				word_builder.WriteRune(current)
-			} else if unicode.IsSpace(current) {
-				resolveWord(out, &builder, &word_builder, kw_pos)
-				kw_pos = 0
-			} else if unicode.IsNumber(current) {
-				if word_builder.Len() != 0 {
-					word_builder.WriteRune(current)
-				} else {
-					resolveWord(out, &builder, &word_builder, kw_pos)
-					kw_pos = 0
-				}
+			analyzer.Current = current
+			analyzer.Column++
+
+			if resolveSeparator(analyzer) {
+				continue
+			} else if resolveOperator(analyzer) {
+				continue
+			} else if resolveLetter(analyzer) {
+				continue
+			} else if resolveSpace(analyzer) {
+				continue
+			} else if resolveNumer(analyzer) {
+				continue
 			}
-			index++
 		}
 	}
-	resolveWord(out, &builder, &word_builder, index)
+	resolveWord(analyzer)
 }
