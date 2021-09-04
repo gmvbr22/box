@@ -153,6 +153,11 @@ func ParseFile(input string) {
 	for {
 		if current, _, err := reader.ReadRune(); err != nil {
 			if err == io.EOF {
+				ast.ReadToken(&ast.Token{
+					Type:   ast.EOF,
+					Line:   analyzer.Line,
+					Column: analyzer.ColumnStart,
+				})
 				break
 			} else {
 				log.Fatal(err)

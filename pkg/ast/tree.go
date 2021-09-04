@@ -7,6 +7,7 @@ const (
 	Identifier = "Identifier"
 	Operator   = "Operator"
 	Separator  = "Separator"
+	EOF        = "EOF"
 )
 
 type Token struct {
